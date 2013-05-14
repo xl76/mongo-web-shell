@@ -93,84 +93,131 @@ describe('The dom module', function () {
 
 
 describe('The keyword module', function () {
+  // TODO: Test.
   it('uses use,help,show to switch what function to call', function () {
-      var help = sinon.stub();
-      var show = sinon.stub();
-      var it = sinon.stub();
-      var words = ['use','it','help','show'];
+      var functionNames = ['use','it','help','show'];
       var arg = [0,'arg', 'arg2', 'unusedArg',undefined];
 
       function Shell() {
         this.insertResponseLine = sinon.stub();
       }
+
       mongo.keyword.shell = new Shell();
 
-      function spies(i) {
-        if(i === 0)
-          return mongo.keyword.use;
-        if(i === 1)
-          return mongo.keyword.it;
-        if(i === 2)
-          return mongo.keyword.help;
-        if(i === 3)
-          return mongo.keyword.show;
-      }
-
-      for (var i = 0;i<1;i++) {
-        spyOn(mongo.keyword, words[i]);
-        mongo.keyword.evaluate(arg[0], words[i], arg[1], arg[2], arg[3] );
-        if( i !== 1) {
-          if(i === 0)
-            expect(spies(i)).toHaveBeenCalledWith(arg[4],arg[1],arg[2],arg[3]);
-          else
-            expect(spies(i)).not.toHaveBeenCalled();
-          mongo.keyword.evaluate(arg[0], words[i], arg[1], arg[2]);
-          expect(spies(i)).toHaveBeenCalledWith(arg[4],arg[1],arg[2],arg[4]);
+      functionNames.forEach(function (functionName) {
+        spyOn(mongo.keyword, functionName);
+        mongo.keyword.evaluate(arg[0],functionName,arg[1], arg[2], arg[3]);
+        switch (functionName) {
+        case 'it':
+          expect(mongo.keyword.it).toHaveBeenCalled();
+          break;
+        case 'use':
+          var spy = mongo.keyword.use;
+          expect(spy).toHaveBeenCalledWith(arg[4],arg[1],arg[2],arg[3]);
+          mongo.keyword.evaluate(arg[0], 'use', arg[1], arg[2]);
+          expect(spy).toHaveBeenCalledWith(arg[4],arg[1],arg[2],arg[4]);
+          break;
+        case 'help':
+          spy = mongo.keyword.help;
+          expect(spy).not.toHaveBeenCalled();
+          mongo.keyword.evaluate(arg[0], 'help', arg[1], arg[2]);
+          expect(spy).toHaveBeenCalledWith(arg[4],arg[1],arg[2]);
+          break;
+        case 'show':
+          spy = mongo.keyword.show;
+          expect(spy).not.toHaveBeenCalled();
+          mongo.keyword.evaluate(arg[0], 'show', arg[1], arg[2]);
+          expect(spy).toHaveBeenCalledWith(arg[4],arg[1],arg[2]);
+          break;
         }
-        else {
-          expect(spies(i)).toHaveBeenCalledWith(arg[4]);
-        }
-      }
-      spyOn(mongo.keyword.shell,'insertResponseLine');
+      });
+      spyOn(mongo.keyword.shell, 'insertResponseLine');
+      var a = ['Unknown keyword: a.','Unknown keyword: b.'];
+      spy = mongo.keyword.shell.insertResponseLine;
       mongo.keyword.evaluate(arg[0], 'a', arg[1], arg[2], arg[3]);
-      var res = 'Unknown keyword: a.';
-      expect(mongo.keyword.shell.insertResponseLine).toHaveBeenCalledWith(res);
       mongo.keyword.evaluate(arg[0], 'b', arg[1], arg[2]);
-      res = 'Unknown keyword: b.';
-      expect(mongo.keyword.shell.insertResponseLine).toHaveBeenCalledWith(res);
+      expect(spy).toHaveBeenCalledWith(a[0]);
+      expect(spy).toHaveBeenCalledWith(a[1]);
     });
 
   it('help function', function(){
     // TODO: Wait for javascript to be implemented.
   });
 
-  it('it function', function() {
-    var it = mongo.keyword.it;
-    function Shell() {
-        this.insertResponseLine = sinon.stub();
-      }
-    var shell = new Shell();
-    spyOn(shell,'insertResponseLine');
-    it(shell);
-    expect(shell.insertResponseLine).toHaveBeenCalledWith('no cursor');
+  it('show function', function(){
+    // TODO: Wait for javascript to be implemented.
+  });
 
-    function Cursor() {
-        this.hasNext = sinon.stub().returns(true);
+  it('use function', function(){
+     // TODO: Wait for javascript to be implemented.
+  });
+});
+
+
+describe('it function inside keyword module', function () {
+  it('it function', function(){
+    function Cursor(arg) {
+        this.hasNext = sinon.stub().returns(arg);
         this._printBatch = sinon.stub();
       }
 
-    shell.lastUsedCursor = new Cursor();
-    spyOn(shell.lastUsedCursor,'_printBatch');
-    expect(shell.lastUsedCursor._printBatch).not.toHaveBeenCalled();
-    it(shell);
-    expect(shell.lastUsedCursor._printBatch).toHaveBeenCalled();
-    expect(shell.insertResponseLine.calls.length).toEqual(1);
+    function Shell(arg) {
+        this.lastUsedCursor = new Cursor(arg);
+        this.insertResponseLine = sinon.stub();
+      }
+
+    var nextOrNot = [true,false];
+    nextOrNot.forEach(function (next) {
+        var shell = new Shell(next);
+        spyOn(shell.lastUsedCursor,'_printBatch');
+        spyOn(shell, 'insertResponseLine');
+        if(next) {
+          expect(shell.lastUsedCursor._printBatch).not.toHaveBeenCalled();
+          mongo.keyword.it(shell);
+          expect(shell.lastUsedCursor._printBatch).toHaveBeenCalled();
+          expect(shell.insertResponseLine).not.toHaveBeenCalled();
+        }
+        else {
+          expect(shell.insertResponseLine).not.toHaveBeenCalled();
+          mongo.keyword.it(shell);
+          expect(shell.insertResponseLine).toHaveBeenCalledWith('no cursor');
+          expect(shell.lastUsedCursor._printBatch).not.toHaveBeenCalled();
+        }
+      });
   });
 });
 
 
 describe('The mutateSource module', function () {
   // TODO: Test.
+  it('swap keywords for each statement', function () {
+    var keywords = ['use;show;help','other;use','show'];
+    function result(arg){
+        return 'mongo.keyword.evaluate(2, '+"'"+arg+"')";
+      }
+    var res = [result('use'), result('show'), result('help')];
+    keywords.forEach(function (keyword) {
+        var swapKeywords = mongo.mutateSource.swapKeywords(keyword,2);
+        switch (keyword) {
+        case 'use;show;help':
+          expect(swapKeywords).toEqual(res[0]+'; '+res[1]+'; '+res[2]);
+          break;
+        case 'other;use':
+          expect(swapKeywords).toEqual('other; '+res[0]);
+          break;
+        case 'show':
+          expect(swapKeywords).toEqual(res[1]);
+          break;
+        }
+      });
+  });
+
+  it('converts tokens to keyword calls', function () {
+    var token = ['one','two','three'];
+    var convertTokens=mongo.mutateSource._convertTokensToKeywordCall(0,token);
+    var res = "mongo.keyword.evaluate(0, 'one', 'two', 'three')";
+    expect(convertTokens).toEqual(res);
+  });
 });
 
 
